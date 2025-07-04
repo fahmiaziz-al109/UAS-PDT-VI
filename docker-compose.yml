@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  postgres_master:
+    image: postgres:14
+    container_name: postgres_master
+    environment:
+      POSTGRES_DB: ecommerce_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: uaspdt
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data_master:/var/lib/postgresql/data
+    command: >
+      postgres -c wal_level=logical
+               -c max_replication_slots=10
+               -c max_wal_senders=10
+
+  postgres_replika:
+    image: postgres:14
+    container_name: postgres_replika
+    environment:
+      POSTGRES_DB: ecommerce_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: uaspdt
+    ports:
+      - "5433:5432"
+    depends_on:
+      - postgres_master
+    volumes:
+      - pg_data_replika:/var/lib/postgresql/data
+    command: >
+      postgres -c wal_level=logical
+               -c max_replication_slots=10
+               -c max_wal_senders=10
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres_master
+
+  mongodb1:
+    image: mongo:latest
+    container_name: mongodb1
+    command: mongod --replSet rs0 --bind_ip_all
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data_db1:/data/db
+
+  mongodb2:
+    image: mongo:latest
+    container_name: mongodb2
+    command: mongod --replSet rs0 --bind_ip_all
+    ports:
+      - "27018:27017"
+    depends_on:
+      - mongodb1
+    volumes:
+      - mongo_data_db2:/data/db
+
+  mongodb3:
+    image: mongo:latest
+    container_name: mongodb3
+    command: mongod --replSet rs0 --bind_ip_all
+    ports:
+      - "27019:27017"
+    depends_on:
+      - mongodb1
+    volumes:
+      - mongo_data_db3:/data/db
+
+  mongo-express:
+    image: mongo-express
+    container_name: mongo_express
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongodb1
+      ME_CONFIG_MONGODB_PORT: 27017
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongodb1
+
+  redis:
+    image: redis:latest
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  neo4j:
+    image: neo4j:latest
+    container_name: neo4j_graph
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/admin123
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: 'yes'
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+
+  api:
+    build: ./rest-api
+    container_name: ecommerce_api
+    ports:
+      - "3000:3000"
+    environment:
+      - PG_HOST=postgres_master
+      - PG_PORT=5432
+      - PG_USER=admin
+      - PG_PASSWORD=uaspdt
+      - PG_DATABASE=ecommerce_db
+    depends_on:
+      - postgres_master
+
+volumes:
+  pg_data_master:
+  pg_data_replika:
+  mongo_data_db1:
+  mongo_data_db2:
+  mongo_data_db3:
+  redis_data:
+  neo4j_data:
+  neo4j_logs:
